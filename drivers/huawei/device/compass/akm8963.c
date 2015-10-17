@@ -30,7 +30,7 @@
 #include <linux/workqueue.h>
 #include <linux/freezer.h>
 #include <linux/board_sensors.h>
-#include <akm8963.h>
+#include "akm8963.h"
 #include <asm/io.h>
 #include <linux/mux.h>
 #ifdef CONFIG_HUAWEI_HW_DEV_DCT

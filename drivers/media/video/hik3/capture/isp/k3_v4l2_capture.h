@@ -24,7 +24,7 @@
 #include <linux/videodev2.h>
 #include <linux/semaphore.h>
 #include "cam_util.h"
-#include "camera.h"
+#include "../camera.h"
 #include "sensor_common.h"
 
 #define VIDIOC_CHECK_CAP  _IOWR('V', 200, struct v4l2_ext_controls)
