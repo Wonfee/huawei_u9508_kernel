@@ -43,14 +43,13 @@
 #include "mipi_reg.h"
 
 #include <linux/lcd_tuning.h>
-/* END:   Added by huohua, 2012/01/07 */
 
 #define PWM_LEVEL 100
 
 #define TRUE_MIPI  1
 #define FALSE_MIPI 0
 static int isCabcVidMode = FALSE_MIPI;
-/* END:   Added by huohua, 2012/02/14 */
+
 
 /*----------------Power ON Sequence(sleep mode to Normal mode)---------------------*/
 
@@ -63,7 +62,6 @@ static char powerOnData1[] = {
 static char cabc_on[] = {
 	0xBB,
 	0x0D
-	/* END:   Modified by huohua, 2012/02/14 */
 };
 
 static char cabc_off[] = {
@@ -85,6 +83,8 @@ static char display_RGB_switch_order[] = {
 	0x00,  
 };
 
+
+
 /* Color Enhancement */
 static char color_enhance[] = {
     0xBD,
@@ -93,12 +93,18 @@ static char color_enhance[] = {
     0x20, 0x00, 0x80,
 };
 
-/* NVM load control */
 static char powerOnData2[] = {
-/* END:   Modified by huohua, 2012/02/24 */
 	0xB9,
 	0x00, 0x00, 0xEA, 0x00
 };
+
+#if defined(CONFIG_OVERLAY_COMPOSE)
+static char  blanktime[] = {
+	0xC0,
+	0x40, 0x02, 0x7F, 0x0E,
+	0x07,
+};
+#endif //CONFIG_OVERLAY_COMPOSE
 
 /* exit sleep mode */
 static char exit_sleep[] = {
@@ -233,7 +239,6 @@ static struct dsi_cmd_desc toshiba_cabc_vid_cmds[] = {
 	{DTYPE_GEN_LWRITE, 0, 30, WAIT_TYPE_US,
 		sizeof(cabcVidData3), cabcVidData3}
 };
-/* END:   Added by huohua, 2012/02/14 */
 
 static struct dsi_cmd_desc toshiba_gamma25_cmds[] = {
 	{DTYPE_GEN_LWRITE, 0, 30, WAIT_TYPE_US,
@@ -274,6 +279,12 @@ static struct dsi_cmd_desc toshiba_video_on_cmds[] = {
 		sizeof(powerOnData2), powerOnData2},
 	{DTYPE_GEN_LWRITE, 0, 30, WAIT_TYPE_US,
 		sizeof(display_RGB_switch_order), display_RGB_switch_order},
+
+#if defined(CONFIG_OVERLAY_COMPOSE)
+	{DTYPE_GEN_LWRITE, 0, 30, WAIT_TYPE_US,
+		sizeof(blanktime), blanktime},
+#endif //CONFIG_OVERLAY_COMPOSE
+
 	{DTYPE_GEN_WRITE2, 0, 30, WAIT_TYPE_US,
 		sizeof(cabc_on), cabc_on},
 	{DTYPE_GEN_LWRITE, 0, 30, WAIT_TYPE_US,
@@ -287,52 +298,61 @@ static struct dsi_cmd_desc toshiba_display_off_cmds[] = {
 		sizeof(enter_sleep), enter_sleep}
 };
 
+
 static struct k3_fb_panel_data toshiba_panel_data;
 
+
+/******************************************************************************/
+static struct lcd_tuning_dev *p_tuning_dev = NULL;
+static int cabc_mode = 1;	 /*allow application to set cabc mode to ui mode */
+
+static int toshiba_set_cabc(struct lcd_tuning_dev *ltd, enum tft_cabc cabc);
+
 static ssize_t toshiba_lcd_info_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+	struct device_attribute *attr, char *buf)
 {
 	int ret = 0;
-	struct k3_panel_info *pinfo;
+	struct k3_panel_info *pinfo = NULL;
+
 	pinfo = toshiba_panel_data.panel_info;
 	sprintf(buf, "Toshiba_MDW70 4.5'TFT %d x %d\n",
-		pinfo->xres, pinfo->yres);
+	pinfo->xres, pinfo->yres);
 	ret = strlen(buf) + 1;
+
 	return ret;
 }
-static struct lcd_tuning_dev *p_tuning_dev = NULL;
-static int cabc_mode = 1;	//allow application to set cabc mode to ui mode
 static ssize_t show_cabc_mode(struct device *dev,
-        struct device_attribute *attr,
-        char *buf)
+	struct device_attribute *attr, char *buf)
 {
 	return sprintf(buf, "%d\n", cabc_mode);
 }
-static int toshiba_set_cabc(struct lcd_tuning_dev *ltd, enum tft_cabc cabc);
+
 static ssize_t store_cabc_mode(struct device *dev,
-        struct device_attribute *attr,
-        char *buf)
+	struct device_attribute *attr, char *buf)
 {
-	int rc;
-	unsigned long val;
-	rc = strict_strtoul(buf, 0, &val);
-	if (rc)
-		return rc;
-	if(val == 1)
-	{
-	    cabc_mode =1;//allow application to set cabc mode to ui mode
-	    toshiba_set_cabc(p_tuning_dev,CABC_UI);
+	int ret = 0;
+	unsigned long val = 0;
+
+	ret = strict_strtoul(buf, 0, &val);
+	if (ret)
+		return ret;
+
+	if (val == 1) {
+		/* allow application to set cabc mode to ui mode */
+		cabc_mode =1;
+		toshiba_set_cabc(p_tuning_dev,CABC_UI);
+	} else if (val == 2) {
+		/* force cabc mode to video mode */
+		cabc_mode =2;
+		toshiba_set_cabc(p_tuning_dev,CABC_VID);
 	}
-	else if(val == 2)
-	{
-	    cabc_mode =2;//force cabc mode to video mode
-	    toshiba_set_cabc(p_tuning_dev,CABC_VID);
-	}
+
 	return sprintf(buf, "%d\n", cabc_mode);
 }
 
 static DEVICE_ATTR(lcd_info, S_IRUGO, toshiba_lcd_info_show, NULL);
-static DEVICE_ATTR(cabc_mode, 0644,show_cabc_mode, store_cabc_mode);
+
+static DEVICE_ATTR(cabc_mode, 0644, show_cabc_mode, store_cabc_mode);
 static struct attribute *toshiba_attrs[] = {
 	&dev_attr_lcd_info,
 	&dev_attr_cabc_mode,
@@ -341,14 +361,40 @@ static struct attribute *toshiba_attrs[] = {
 static struct attribute_group toshiba_attr_group = {
 	.attrs = toshiba_attrs,
 };
+static u32 square_point_6(u32 x)
+{
+	unsigned long t = x * x * x;
+	unsigned long t0 = 0;
+	u32 i = 0, j = 255, k = 0;
+
+	while(j - i > 1)
+	{
+		k = (i + j) / 2;
+		t0 = k * k * k * k * k;
+		if(t0 < t){
+		    i = k;
+		}
+		else if(t0 > t){
+		    j = k;
+		}
+		else{
+		    return k;
+		}
+	}
+
+	return k;
+}
+/* END:   Added by huohua, 2012/6/12 */
 static int toshiba_sysfs_init(struct platform_device *pdev)
 {
-	int ret;
+	int ret = 0;
+
 	ret = sysfs_create_group(&pdev->dev.kobj, &toshiba_attr_group);
 	if (ret) {
-		pr_err("k3fb, %s: create sysfs file failed!\n", __func__);
+		k3fb_loge("create sysfs file failed!\n");
 		return ret;
 	}
+
 	return 0;
 }
 
@@ -357,18 +403,18 @@ static void toshiba_sysfs_deinit(struct platform_device *pdev)
 	sysfs_remove_group(&pdev->dev.kobj, &toshiba_attr_group);
 }
 
-//static int g_disp_on_state = FALSE_MIPI;
-	/* END:   Deleted by huohua, 2012/02/14 */
-
 static int toshiba_set_gamma(struct lcd_tuning_dev *ltd, enum lcd_gamma gamma)
 {
-	int r = 0;
+	int ret = 0;
 	u32 edc_base = 0;
+	struct platform_device *pdev = NULL;
+	struct k3_fb_data_type *k3fd = NULL;
 
 	BUG_ON(ltd == NULL);
-	struct platform_device *pdev = (struct platform_device *)(ltd->data);
-	struct k3_fb_data_type *k3fd = (struct k3_fb_data_type *)platform_get_drvdata(pdev);
+	pdev = (struct platform_device *)(ltd->data);
+	k3fd = (struct k3_fb_data_type *)platform_get_drvdata(pdev);
 	BUG_ON(k3fd == NULL);
+
 	edc_base = k3fd->edc_base;
 
 	switch (gamma) {
@@ -381,27 +427,31 @@ static int toshiba_set_gamma(struct lcd_tuning_dev *ltd, enum lcd_gamma gamma)
 			ARRAY_SIZE(toshiba_gamma22_cmds), edc_base);
 		break;
 	default:
-		r = -1;
+		ret = -1;
+		break;
 	}
-out:
-	return r;
+
+	return ret;
 }
-/* END:   Added by huohua, 2012/01/07 */
 
 static int toshiba_set_cabc(struct lcd_tuning_dev *ltd, enum  tft_cabc cabc)
 {
-	int r = 0;
+	int ret = 0;
 	u32 edc_base = 0;
+	struct platform_device *pdev = NULL;
+	struct k3_fb_data_type *k3fd= NULL;
 	u32 bl_level = 0;
     /* END:   Added by huohua, 2012/6/12 */
 
 	BUG_ON(ltd == NULL);
-	struct platform_device *pdev = (struct platform_device *)(ltd->data);
-	struct k3_fb_data_type *k3fd = (struct k3_fb_data_type *)platform_get_drvdata(pdev);
+	pdev = (struct platform_device *)(ltd->data);
+	k3fd = (struct k3_fb_data_type *)platform_get_drvdata(pdev);
 	BUG_ON(k3fd == NULL);
+
 	edc_base = k3fd->edc_base;
 
-	bl_level = ( k3fd->bl_level * square_point_six(k3fd->bl_level) * 100 ) / 2779;
+	//bl_level = ( k3fd->bl_level * square_point_6(k3fd->bl_level) * 100 ) / 2779;
+	bl_level = k3fd->bl_level;
 	if(bl_level > 255){
 		bl_level = 255;
 	}
@@ -429,13 +479,20 @@ static int toshiba_set_cabc(struct lcd_tuning_dev *ltd, enum  tft_cabc cabc)
 	case CABC_OFF:
 		break;
 	default:
-		r = -1;
+		ret = -1;
+		break;
 	}
-out:
-	return r;
-}
-/* END:   Added by huohua, 2012/02/14 */
 
+	return ret;
+}
+
+static struct lcd_tuning_ops sp_tuning_ops = {
+	.set_gamma = toshiba_set_gamma,
+	.set_cabc = toshiba_set_cabc,
+};
+
+
+/******************************************************************************/
 static int toshiba_pwm_on(struct k3_fb_data_type *k3fd)
 {
 	BUG_ON(k3fd == NULL);
@@ -496,24 +553,19 @@ static void toshiba_disp_on(struct k3_fb_data_type *k3fd)
 
 	mipi_dsi_cmds_tx(toshiba_video_on_cmds, \
 		ARRAY_SIZE(toshiba_video_on_cmds), edc_base);
-	/* END:   Modified by huohua, 2012/02/24 */
 
 	if (TRUE_MIPI == isCabcVidMode) {
 		cabcVidData3[1] = 0x00;
 		cabcVidData3[2] = 0x00;
 		mipi_dsi_cmds_tx(toshiba_cabc_vid_cmds, \
 			ARRAY_SIZE(toshiba_cabc_vid_cmds), edc_base);
-	}
-	else {
-		//Default is UI mode.
+	} else {
+		/* Default is UI mode. */
 		cabcUiData3[1] = 0x00;
 		cabcUiData3[2] = 0x00;
 		mipi_dsi_cmds_tx(toshiba_cabc_ui_cmds, \
 			ARRAY_SIZE(toshiba_cabc_ui_cmds), edc_base);
 	}
-
-	printk("-----display on-----");
-	/* END:   Added by huohua, 2012/02/14 */
 }
 
 static void toshiba_disp_off(struct k3_fb_data_type *k3fd)
@@ -597,12 +649,11 @@ static int mipi_toshiba_panel_remove(struct platform_device *pdev)
 {
 	struct k3_fb_data_type *k3fd = NULL;
 
-	pr_info("k3fb, %s: enter!\n", __func__);
-
 	BUG_ON(pdev == NULL);
-
 	k3fd = (struct k3_fb_data_type *)platform_get_drvdata(pdev);
 	BUG_ON(k3fd == NULL);
+
+	k3fb_logi("index=%d, enter!\n", k3fd->index);
 
 	if (k3fd->panel_info.bl_set_type & BL_SET_BY_PWM) {
 		PWM_CLK_PUT(&(k3fd->panel_info));
@@ -611,7 +662,7 @@ static int mipi_toshiba_panel_remove(struct platform_device *pdev)
 
 	toshiba_sysfs_deinit(pdev);
 
-	pr_info("k3fb, %s: exit!\n", __func__);
+	k3fb_logi("index=%d, exit!\n", k3fd->index);
 
 	return 0;
 }
@@ -638,7 +689,8 @@ static int mipi_toshiba_panel_set_backlight(struct platform_device *pdev)
 		//Let the backlight brightness to adjust way by the curve transformation,
 		//to better meet the human visual characteristics.
 		//Y = (X / 255) ^ 1.6 * 255
-		bl_level = ( k3fd->bl_level * square_point_six(k3fd->bl_level) * 100 ) / 2779;
+		//bl_level = ( k3fd->bl_level * square_point_6(k3fd->bl_level) * 100 ) / 2779;
+		bl_level = k3fd->bl_level;
 		if(bl_level > 255){
 			bl_level = 255;
 		}
@@ -648,30 +700,16 @@ static int mipi_toshiba_panel_set_backlight(struct platform_device *pdev)
 		if (TRUE_MIPI == isCabcVidMode) {
 			outp32(edc_base + MIPIDSI_GEN_PLD_DATA_OFFSET, (bl_h | bl_l | 0x000000be));
 			outp32(edc_base + MIPIDSI_GEN_PLD_DATA_OFFSET, 0x400418);
-		}
-		else {
+		} else {
 			outp32(edc_base + MIPIDSI_GEN_PLD_DATA_OFFSET, (bl_h | bl_l | 0x020000be));
 			outp32(edc_base + MIPIDSI_GEN_PLD_DATA_OFFSET, 0x040402);
 		}
 		outp32(edc_base + MIPIDSI_GEN_PLD_DATA_OFFSET, 0x5d);
 		outp32(edc_base + MIPIDSI_GEN_HDR_OFFSET, 0x929);
-	/* END:   Modified by huohua, 2012/02/24 */
-		return 0;
 	}
-}
-
-static int mipi_toshiba_panel_set_playvideo(struct platform_device *pdev, int gamma)
-{
-	u32 edc_base = 0;
-	struct k3_fb_data_type *k3fd = NULL;
-
-	BUG_ON(pdev == NULL);
-	k3fd = (struct k3_fb_data_type *)platform_get_drvdata(pdev);
-	BUG_ON(k3fd == NULL);
-	edc_base = k3fd->edc_base;
 
 	return 0;
-};
+}
 
 static int mipi_toshiba_panel_set_fastboot(struct platform_device *pdev)
 {
@@ -711,6 +749,8 @@ static int mipi_toshiba_panel_set_cabc(struct platform_device *pdev, int value)
 	} else {
 		outp32(edc_base + MIPIDSI_GEN_HDR_OFFSET, 0x0cbb23);
 	}
+
+	return 0;
 }
 
 static struct k3_panel_info toshiba_panel_info = {0};
@@ -720,32 +760,26 @@ static struct k3_fb_panel_data toshiba_panel_data = {
 	.off = mipi_toshiba_panel_off,
 	.remove = mipi_toshiba_panel_remove,
 	.set_backlight = mipi_toshiba_panel_set_backlight,
-	.set_playvideo = mipi_toshiba_panel_set_playvideo,
 	.set_fastboot = mipi_toshiba_panel_set_fastboot,
 	.set_cabc = mipi_toshiba_panel_set_cabc,
 };
-
-static struct lcd_tuning_ops sp_tuning_ops = {
-	.set_gamma = toshiba_set_gamma,
-	.set_cabc = toshiba_set_cabc
-	/* END:   Added by huohua, 2012/02/14 */
-};
-/* END:   Added by huohua, 2012/01/07 */
 
 static int __devinit toshiba_probe(struct platform_device *pdev)
 {
 	struct k3_panel_info *pinfo = NULL;
 	struct resource *res = NULL;
+	
 	struct platform_device *reg_pdev;
 	struct lcd_tuning_dev *ltd;
 	struct lcd_properities lcd_props;
-	/* END:   Added by huohua, 2012/01/07 */
 
 	pinfo = toshiba_panel_data.panel_info;
 	/* init lcd panel info */
 	pinfo->display_on = false;
 	pinfo->xres = 720;
 	pinfo->yres = 1280;
+	pinfo->width = 55;
+	pinfo->height = 98;
 	pinfo->type = PANEL_MIPI_VIDEO;
 	pinfo->orientation = LCD_PORTRAIT;
 	pinfo->bpp = EDC_OUT_RGB_888;
@@ -761,18 +795,25 @@ static int __devinit toshiba_probe(struct platform_device *pdev)
 
 	pinfo->sbl.bl_max = 0xff;
 	pinfo->sbl.cal_a = 0x0f;
+	pinfo->sbl.cal_b = 0xd8;
 	pinfo->sbl.str_limit = 0x40;
 
-	pinfo->ldi.h_back_porch = 53; /* 149; 53; 40; */
-	 if (get_chipid() == DI_CHIP_ID) {
-		pinfo->ldi.h_front_porch = 159;//192;//82;
-	 } else {
-		pinfo->ldi.h_front_porch = 133;//192;//82;
-	 }
-	pinfo->ldi.h_pulse_width = 67; /*74; 67; 50; */
-	pinfo->ldi.v_back_porch = 4; /*3;*/
-	pinfo->ldi.v_front_porch = 15; /*27;*/
+	pinfo->ldi.h_back_porch = 53;
+#if defined(CONFIG_OVERLAY_COMPOSE)
+	pinfo->ldi.h_front_porch = 134;
+#else
+	pinfo->ldi.h_front_porch = 133;
+#endif
+	pinfo->ldi.h_pulse_width = 67;
+#if defined(CONFIG_OVERLAY_COMPOSE)
+	pinfo->ldi.v_back_porch = 12;
+	pinfo->ldi.v_front_porch = 7;
+	pinfo->ldi.v_pulse_width = 1;
+#else
+	pinfo->ldi.v_back_porch = 4;
+	pinfo->ldi.v_front_porch = 15;
 	pinfo->ldi.v_pulse_width = 2;
+#endif
 	pinfo->ldi.hsync_plr = 1;
 	pinfo->ldi.vsync_plr = 1;
 	pinfo->ldi.pixelclk_plr = 0;
@@ -780,18 +821,13 @@ static int __devinit toshiba_probe(struct platform_device *pdev)
 	pinfo->ldi.disp_mode = LDI_DISP_MODE_NOT_3D_FBF;
 
 	/* Note: must init here */
-	pinfo->frame_rate = 60;//67;//60;
-	/*pinfo->clk_rate = LCD_GET_CLK_RATE(pinfo);*/
-	if (get_chipid() == DI_CHIP_ID) {
-		pinfo->clk_rate = 78000000;//72000000;//70000000;
-	} else {
-		pinfo->clk_rate = 76000000;//72000000;//70000000;
-	}
+	pinfo->frame_rate = 60;
+	pinfo->clk_rate = 76000000;
 
 	pinfo->mipi.lane_nums = DSI_4_LANES;
 	pinfo->mipi.color_mode = DSI_24BITS_1;
 	pinfo->mipi.vc = 0;
-	pinfo->mipi.dsi_bit_clk = 241;//241;//216; /*481; clock lane(p/n) */
+	pinfo->mipi.dsi_bit_clk = 241;
 
 	/* lcd vcc */
 	LCD_VCC_GET(pdev, pinfo);
@@ -813,26 +849,24 @@ static int __devinit toshiba_probe(struct platform_device *pdev)
 	/* alloc panel device data */
 	if (platform_device_add_data(pdev, &toshiba_panel_data,
 		sizeof(struct k3_fb_panel_data))) {
-		pr_err("k3fb, %s: platform_device_add_data failed!\n", __func__);
+		k3fb_loge("failed to platform_device_add_data!\n");
 		platform_device_put(pdev);
 		return -ENOMEM;
 	}
 
 	reg_pdev = k3_fb_add_device(pdev);
+
+	/* for cabc */
 	lcd_props.type = TFT;
 	lcd_props.default_gamma = GAMMA25;
-
 	ltd = lcd_tuning_dev_register(&lcd_props, &sp_tuning_ops, (void *)reg_pdev);
 	p_tuning_dev=ltd;
 	if (IS_ERR(ltd)) {
-		pr_err("k3fb, %s: lcd_tuning_dev_register failed!\n", __func__);
+		k3fb_loge("lcd_tuning_dev_register failed!\n");
 		return -1;
 	}
-	/* END:   Added by huohua, 2012/01/07 */
 
 	toshiba_sysfs_init(pdev);
-
-	printk("-----%s complete\n", __func__);
 
 	return 0;
 }
@@ -854,7 +888,7 @@ static int __init mipi_toshiba_panel_init(void)
 
 	ret = platform_driver_register(&this_driver);
 	if (ret) {
-		pr_err("k3fb, %s not able to register the driver\n", __func__);
+		k3fb_loge("not able to register the driver, error=%d!\n", ret);
 		return ret;
 	}
 

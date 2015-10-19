@@ -10,7 +10,7 @@
 #include "hw_vacs_k3oem_configs.c"
 #include "hw_CS_U9510_configs.c"
 #include "hw_CS_U9510_VC_configs.c"
-#include "hw_k3oem_configs.c"
+#include "hw_apu1ve_k3oem_configs.c"
 #include "hw_vccs_k3oem_configs.c"
 extern struct board_id_general_struct config_power_U9508;
 extern struct board_id_general_struct config_power_U9510D;
@@ -20,7 +20,7 @@ extern struct board_id_general_struct config_power_U9510;
 extern struct board_id_general_struct config_power_vacs_k3oem;
 extern struct board_id_general_struct config_power_CS_U9510;
 extern struct board_id_general_struct config_power_CS_U9510_VC;
-extern struct board_id_general_struct config_power_k3oem;
+extern struct board_id_general_struct config_power_apu1ve_k3oem;
 extern struct board_id_general_struct config_power_vccs_k3oem;
 
 /*gpio perl producted data*/
@@ -41,8 +41,8 @@ extern struct board_id_general_struct config_gpio_CS_U9510;
 extern struct board_id_general_struct config_pm_gpio_CS_U9510;
 extern struct board_id_general_struct config_gpio_CS_U9510_VC;
 extern struct board_id_general_struct config_pm_gpio_CS_U9510_VC;
-extern struct board_id_general_struct config_gpio_k3oem;
-extern struct board_id_general_struct config_pm_gpio_k3oem;
+extern struct board_id_general_struct config_gpio_apu1ve_k3oem;
+extern struct board_id_general_struct config_pm_gpio_apu1ve_k3oem;
 extern struct board_id_general_struct config_gpio_vccs_k3oem;
 extern struct board_id_general_struct config_pm_gpio_vccs_k3oem;
 #endif
@@ -59,7 +59,7 @@ struct board_id_general_struct  *hw_ver_total_configs[] =
     &config_gpio_vacs_k3oem, //gpio
     &config_gpio_CS_U9510, //gpio
     &config_gpio_CS_U9510_VC, //gpio
-    &config_gpio_k3oem, //gpio
+    &config_gpio_apu1ve_k3oem, //gpio
     &config_gpio_vccs_k3oem, //gpio
 #endif
 #ifdef CONFIG_HUAWEI_GPIO_UNITE
@@ -71,7 +71,7 @@ struct board_id_general_struct  *hw_ver_total_configs[] =
     &config_pm_gpio_vacs_k3oem, //pm gpio
     &config_pm_gpio_CS_U9510, //pm gpio
     &config_pm_gpio_CS_U9510_VC, //pm gpio
-    &config_pm_gpio_k3oem, //pm gpio
+    &config_pm_gpio_apu1ve_k3oem, //pm gpio
     &config_pm_gpio_vccs_k3oem, //pm gpio
 #endif
     &config_common_U9508, //common xml
@@ -82,6 +82,6 @@ struct board_id_general_struct  *hw_ver_total_configs[] =
     &config_common_vacs_k3oem, //common xml
     &config_common_CS_U9510, //common xml
     &config_common_CS_U9510_VC, //common xml
-    &config_common_k3oem, //common xml
+    &config_common_apu1ve_k3oem, //common xml
     &config_common_vccs_k3oem, //common xml
 };

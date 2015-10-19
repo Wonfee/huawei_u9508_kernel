@@ -24,7 +24,7 @@
 #include <linux/videodev2.h>
 #include <linux/semaphore.h>
 #include "cam_util.h"
-#include "../camera.h"
+#include "camera.h"
 #include "sensor_common.h"
 
 #define VIDIOC_CHECK_CAP  _IOWR('V', 200, struct v4l2_ext_controls)
@@ -210,6 +210,10 @@ void k3_isp_set_pm_mode(u8 pm_mode);
 
 int k3_isp_get_sensor_aperture(void);
 int k3_isp_get_equivalent_focus(void);
+
+void k3_isp_set_video_stabilization(int bStabilization);
+void k3_isp_set_yuv_crop_pos(int point);
+void k3_isp_get_yuv_crop_rect(crop_rect_s *rect);
 
 #endif /*__K3_V4L2_CAPTURE_H__ */
 

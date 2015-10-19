@@ -1199,11 +1199,13 @@ static ssize_t cmi_lcd_info_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	int ret = 0;
-	struct k3_panel_info *pinfo;
+	struct k3_panel_info *pinfo = NULL;
+
 	pinfo = cmi_panel_data.panel_info;
 	sprintf(buf, "CMI_OTM1280A 4.5'TFT %d x %d\n",
 		pinfo->xres, pinfo->yres);
 	ret = strlen(buf) + 1;
+
 	return ret;
 }
 static struct lcd_tuning_dev *p_tuning_dev = NULL;
@@ -1223,12 +1225,14 @@ static ssize_t store_cabc_mode(struct device *dev,
 }
 
 static DEVICE_ATTR(lcd_info, S_IRUGO, cmi_lcd_info_show, NULL);
-static DEVICE_ATTR(cabc_mode, 0644,show_cabc_mode, store_cabc_mode);
+static DEVICE_ATTR(cabc_mode, 0644, show_cabc_mode, store_cabc_mode);
+
 static struct attribute *cmi_attrs[] = {
 	&dev_attr_lcd_info,
 	&dev_attr_cabc_mode,
 	NULL,
 };
+
 static struct attribute_group cmi_attr_group = {
 	.attrs = cmi_attrs,
 };
@@ -1238,7 +1242,7 @@ static int cmi_sysfs_init(struct platform_device *pdev)
 	int ret;
 	ret = sysfs_create_group(&pdev->dev.kobj, &cmi_attr_group);
 	if (ret) {
-		pr_err("k3fb, %s: create sysfs file failed!\n", __func__);
+		k3fb_loge("create sysfs file failed!\n");
 		return ret;
 	}
 	return 0;
@@ -1253,16 +1257,21 @@ static void cmi_sysfs_deinit(struct platform_device *pdev)
 
 static int toshiba_set_color_temperature(struct lcd_tuning_dev *ltd, unsigned int csc_value[])
 {
-    u32 edc_base = 0;
-    int i;
-    u32 tmp;
-    BUG_ON(ltd == NULL);
-    struct platform_device *pdev = (struct platform_device *)(ltd->data);
-    struct k3_fb_data_type *k3fd = (struct k3_fb_data_type *)platform_get_drvdata(pdev);
-    BUG_ON(k3fd == NULL);
+		//int top_index, i;
+		u32 edc_base = 0;
+        int i;
+        u32 tmp;
+	BUG_ON(ltd == NULL);
+	struct platform_device *pdev = (struct platform_device *)(ltd->data);
+	struct k3_fb_data_type *k3fd = (struct k3_fb_data_type *)platform_get_drvdata(pdev);
+	BUG_ON(k3fd == NULL);
 
-    edc_base = k3fd->edc_base;
+	edc_base = k3fd->edc_base;
 
+    pr_err("===========MDY90 [%s] \n", __func__);
+    pr_err(" %d, %d, %d:\n", csc_value[0], csc_value[1], csc_value[2]);
+    pr_err("%d, %d, %d\n",  csc_value[3], csc_value[4], csc_value[5]);
+    pr_err("%d, %d, %d\n",  csc_value[6], csc_value[7], csc_value[8]);
 
     #if CLK_SWITCH
     /* enable edc clk */
@@ -1290,7 +1299,7 @@ static int toshiba_set_color_temperature(struct lcd_tuning_dev *ltd, unsigned in
     clk_disable(k3fd->edc_clk);
     #endif
 
-    return 0;
+	return 0;
 }
 /* END:   add by wugao 00190753*/
 
@@ -1305,6 +1314,8 @@ static int cmi_set_cabc(struct lcd_tuning_dev *ltd, enum  tft_cabc cabc)
 	return 0;
 }
 
+
+/******************************************************************************/
 static int cmi_pwm_on(struct k3_fb_data_type *k3fd)
 {
 	BUG_ON(k3fd == NULL);
@@ -1438,6 +1449,28 @@ static int mipi_cmi_panel_off(struct platform_device *pdev)
 	return 0;
 }
 
+static int mipi_cmi_panel_remove(struct platform_device *pdev)
+{
+	struct k3_fb_data_type *k3fd = NULL;
+
+	BUG_ON(pdev == NULL);
+
+	k3fd = (struct k3_fb_data_type *)platform_get_drvdata(pdev);
+	/*BUG_ON(k3fd == NULL);*/
+	if (!k3fd) {
+		return 0;
+	}
+
+	if (k3fd->panel_info.bl_set_type & BL_SET_BY_PWM) {
+		PWM_CLK_PUT(&(k3fd->panel_info));
+	}
+	LCD_VCC_PUT(&(k3fd->panel_info));
+
+	cmi_sysfs_deinit(pdev);
+
+	return 0;
+}
+
 static int mipi_cmi_panel_set_backlight(struct platform_device *pdev)
 {
 	struct k3_fb_data_type *k3fd = NULL;
@@ -1451,31 +1484,22 @@ static int mipi_cmi_panel_set_backlight(struct platform_device *pdev)
 
 	/*Our eyes are more sensitive to small brightness.
 	So we adjust the brightness of lcd following iphone4 */
-	level = (k3fd->bl_level * square_point_six(k3fd->bl_level) * 100) / 2779;  //Y=(X/255)^1.6*255
+	//level = (k3fd->bl_level * square_point_six(k3fd->bl_level) * 100) / 2779;  //Y=(X/255)^1.6*255
+	level = k3fd->bl_level;
 	if (level > 255)
 		level = 255;
 
+	
 	if (k3fd->panel_info.bl_set_type & BL_SET_BY_PWM) {
 		return pwm_set_backlight(level, &(k3fd->panel_info));
 	} else {
-		outp32(edc_base + MIPIDSI_GEN_HDR_OFFSET, (level << 16) | (0x51 << 8) | 0x15);
+		if (!k3fd->cmd_mode_refresh) {
+			outp32(edc_base + MIPIDSI_GEN_HDR_OFFSET, (level << 16) | (0x51 << 8) | 0x15);
+
+		}
+		return 0;
 	}
-
-	return 0;
 }
-
-static int mipi_cmi_panel_set_playvideo(struct platform_device *pdev, int gamma)
-{
-	u32 edc_base = 0;
-	struct k3_fb_data_type *k3fd = NULL;
-
-	BUG_ON(pdev == NULL);
-	k3fd = (struct k3_fb_data_type *)platform_get_drvdata(pdev);
-	BUG_ON(k3fd == NULL);
-	edc_base = k3fd->edc_base;
-
-	return 0;
-};
 
 static int mipi_cmi_panel_set_fastboot(struct platform_device *pdev)
 {
@@ -1505,19 +1529,19 @@ static int mipi_cmi_panel_set_cabc(struct platform_device *pdev, int value)
 	return 0;
 }
 
+
 static int mipi_cmi_panel_check_esd(struct platform_device *pdev)
 {
 	struct k3_fb_data_type *k3fd = NULL;
-	int tmp = 0;
-	BUG_ON(pdev == NULL);
 
+	BUG_ON(pdev == NULL);
 	k3fd = (struct k3_fb_data_type *)platform_get_drvdata(pdev);
 	BUG_ON(k3fd == NULL);
-	outp32(k3fd->edc_base + MIPIDSI_GEN_HDR_OFFSET, 0x0A << 8 | 0x06);
-	udelay(10);
 
-	return  inp32(k3fd->edc_base + MIPIDSI_GEN_PLD_DATA_OFFSET);
-	//return 0;
+	outp32(k3fd->edc_base + MIPIDSI_GEN_HDR_OFFSET, 0x0A << 8 | 0x06);
+	/* return  inp32(k3fd->edc_base + MIPIDSI_GEN_PLD_DATA_OFFSET); */
+
+	return 0;
 }
 
 static struct k3_panel_info cmi_panel_info = {0};
@@ -1525,11 +1549,11 @@ static struct k3_fb_panel_data cmi_panel_data = {
 	.panel_info = &cmi_panel_info,
 	.on = mipi_cmi_panel_on,
 	.off = mipi_cmi_panel_off,
+	.remove = mipi_cmi_panel_remove,
 	.set_backlight = mipi_cmi_panel_set_backlight,
-	.set_playvideo = mipi_cmi_panel_set_playvideo,
 	.set_fastboot = mipi_cmi_panel_set_fastboot,
-	.set_cabc = NULL,//mipi_cmi_panel_set_cabc,
 	.check_esd = mipi_cmi_panel_check_esd,
+	.set_cabc = mipi_cmi_panel_set_cabc,
 };
 
 static struct lcd_tuning_ops sp_tuning_ops = {
@@ -1553,6 +1577,8 @@ static int __devinit cmi_probe(struct platform_device *pdev)
 	pinfo->display_on = false;
 	pinfo->xres = 720;
 	pinfo->yres = 1280;
+	pinfo->width = 55;
+	pinfo->height = 98;
 	pinfo->type = PANEL_MIPI_CMD;
 	pinfo->orientation = LCD_PORTRAIT;
 	pinfo->bpp = EDC_OUT_RGB_888;
@@ -1561,9 +1587,9 @@ static int __devinit cmi_probe(struct platform_device *pdev)
 	pinfo->bl_set_type = BL_SET_BY_MIPI;
 	pinfo->bl_max = PWM_LEVEL;
 	pinfo->bl_min = 1;
-	
-	pinfo->frc_enable = 0;
-	pinfo->esd_enable = 0;
+
+	pinfo->frc_enable = 1;
+	pinfo->esd_enable = 1;
 	pinfo->sbl_enable = 0;
 
 	pinfo->sbl.bl_max = 0xff;
@@ -1574,7 +1600,7 @@ static int __devinit cmi_probe(struct platform_device *pdev)
 	pinfo->ldi.h_front_porch = 80;
 	pinfo->ldi.h_pulse_width = 57;
 	pinfo->ldi.v_back_porch = 4;
-	pinfo->ldi.v_front_porch = 14;
+	pinfo->ldi.v_front_porch = 15;
 	pinfo->ldi.v_pulse_width = 2;
 
 	pinfo->ldi.hsync_plr = 1;
@@ -1614,7 +1640,7 @@ static int __devinit cmi_probe(struct platform_device *pdev)
 	/* alloc panel device data */
 	if (platform_device_add_data(pdev, &cmi_panel_data,
 		sizeof(struct k3_fb_panel_data))) {
-		pr_err("k3fb, %s: platform_device_add_data failed!\n", __func__);
+		k3fb_loge("platform_device_add_data failed!\n");
 		platform_device_put(pdev);
 		return -ENOMEM;
 	}
@@ -1626,7 +1652,7 @@ static int __devinit cmi_probe(struct platform_device *pdev)
 	ltd = lcd_tuning_dev_register(&lcd_props, &sp_tuning_ops, (void *)reg_pdev);
 	p_tuning_dev=ltd;
 	if (IS_ERR(ltd)) {
-		pr_err("k3fb, %s: lcd_tuning_dev_register failed!\n", __func__);
+		k3fb_loge("lcd_tuning_dev_register failed!\n");
 		return -1;
 	}
 
@@ -1637,41 +1663,12 @@ static int __devinit cmi_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int cmi_remove(struct platform_device *pdev)
-{
-	struct k3_fb_data_type *k3fd = NULL;
-
-	BUG_ON(pdev == NULL);
-
-	k3fd = (struct k3_fb_data_type *)platform_get_drvdata(pdev);
-	/*BUG_ON(k3fd == NULL);*/
-	if (!k3fd) {
-		return 0;
-	}
-
-	if (k3fd->panel_info.bl_set_type & BL_SET_BY_PWM) {
-		PWM_CLK_PUT(&(k3fd->panel_info));
-	}
-	LCD_VCC_PUT(&(k3fd->panel_info));
-
-	cmi_sysfs_deinit(pdev);
-
-	return 0;
-}
-
-static void cmi_shutdown(struct platform_device *pdev)
-{
-	if (cmi_remove(pdev) != 0) {
-		pr_err("k3fb, %s: failed to shutdown!\n", __func__);
-	}
-}
-
 static struct platform_driver this_driver = {
 	.probe = cmi_probe,
-	.remove = cmi_remove,
+	.remove = NULL,
 	.suspend = NULL,
 	.resume = NULL,
-	.shutdown = cmi_shutdown,
+	.shutdown = NULL,
 	.driver = {
 		.name = "mipi_cmi_OTM1280A",
 	},
@@ -1684,7 +1681,7 @@ static int __init mipi_cmi_panel_init(void)
 	printk("-----%s start\n", __func__);
 	ret = platform_driver_register(&this_driver);
 	if (ret) {
-		pr_err("k3fb, %s not able to register the driver\n", __func__);
+		k3fb_loge("not able to register the driver\n");
 		return ret;
 	}
 

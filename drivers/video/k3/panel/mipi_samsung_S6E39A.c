@@ -39,10 +39,181 @@
 #include "k3_fb.h"
 #include "k3_fb_def.h"
 #include "mipi_dsi.h"
-#include "mipi_samsung_S6E39A.h"
 
 
 #define PWM_LEVEL 100
+
+
+/*----------------Power ON Sequence(power on to Normal mode)----------------------*/
+
+static char powerOnData1[] = {
+    0xF0,
+    0x5A, 0x5A,
+};
+
+static char powerOnData2[] = {
+    0xF1,
+    0x5A, 0x5A,
+};
+
+static char powerOnData3[] = {
+    0xFC,
+    0x5A, 0x5A,
+};
+
+static char powerOnData4[] = {
+    0xB1,
+    0x01, 0x00, 0x16,
+};
+
+static char powerOnData5[] = {
+    0xB2,
+    0x06, 0x06, 0x06,
+};
+
+/* 300 */
+static char back_light[] = {
+    0xfa, 0x02, 0x10, 0x10, 0x10, 0xec, 0xb7, 0xef, 0xd1, 0xca,
+    0xd1, 0xd8, 0xda, 0xd8, 0xb5, 0xb8, 0xb0, 0xc5, 0xc8, 0xbf,
+    0x00, 0xb9, 0x00, 0x93, 0x00, 0xd9
+};
+
+#if 0
+static char back_light_700[] = {
+    0xfa, 0x02, 0x10, 0x10, 0x10, 0xd1, 0x34, 0xd0, 0xd6, 0xba,
+    0xdc, 0xe0, 0xd9, 0xe2, 0xc2, 0xc0, 0xbf, 0xd4, 0xd5, 0xd0,
+    0x00, 0x73, 0x00, 0x59, 0x00, 0x82
+};
+#endif
+
+static char gamma_setting_update[] = {
+    0xfa,
+    0x03
+};
+
+static char powerOnData6[] = {
+    0xF8,
+    0x28, 0x28, 0x08, 0x08,
+    0x40, 0xb0, 0x50, 0x90,
+    0x10, 0x30, 0x10, 0x00,
+    0x00,
+};
+
+static char powerOnData7[] = {
+    0xF6,
+    0x00, 0x84, 0x09,
+};
+
+static char powerOnData8[] = {
+    0xb0,
+    0x01,
+};
+
+static char powerOnData9[] = {
+    0xc0,
+    0x00,
+};
+
+static char powerOnData10[] = {
+    0xb0,
+    0x09,
+};
+
+static char powerOnData11[] = {
+    0xd5,
+    0x64,
+};
+
+static char powerOnData12[] = {
+    0xb0,
+    0x0b,
+};
+
+static char powerOnData13[] = {
+    0xd5,
+    0xa4,
+};
+
+static char powerOnData14[] = {
+    0xb0,
+    0x0c,
+};
+
+static char powerOnData15[] = {
+    0xd5,
+    0x7e,
+};
+
+static char powerOnData16[] = {
+    0xb0,
+    0x0d,
+};
+
+static char powerOnData17[] = {
+    0xd5,
+    0x20,
+};
+
+static char powerOnData18[] = {
+    0xb0,
+    0x08,
+};
+	
+static char powerOnData19[] = {
+    0xfd,
+    0xf8,
+};
+
+static char powerOnData20[] = {
+    0xb0,
+    0x04,
+};
+	
+static char powerOnData21[] = {
+    0xf2,
+    0x4d,
+};
+
+static char exit_sleep[] = {
+    0x11,
+};
+
+static char te_off[] = {
+    0x34,
+};
+
+static char memory_window_setting1[] = {
+    0x2a,
+    0x00, 0x1e, 0x02, 0x39,
+};
+
+static char memory_window_setting2[] = {
+    0x2b,
+    0x00, 0x00, 0x03, 0xbf,
+};
+
+static char memory_window_setting3[] = {
+    0xc0,
+    0x01,
+};
+
+static char display_on[] = {
+    0x29,
+};
+
+/*-------------------Power OFF Sequence(Normalto power off)----------------------*/
+
+/* Display Off */
+static char display_off[] = {
+    0x28,
+};
+
+/* Sleep In */
+static char enter_sleep[] = {
+    0x10,
+};
+/* WAIT MIN 120ms For Power Down */
+
 
 static struct dsi_cmd_desc samsung_command_on_cmds[] = {
 	{DTYPE_DCS_LWRITE, 0, 1, WAIT_TYPE_MS,
@@ -248,6 +419,26 @@ static int mipi_samsung_panel_off(struct platform_device *pdev)
 	return 0;
 }
 
+static int mipi_samsung_panel_remove(struct platform_device *pdev)
+{
+	struct k3_fb_data_type *k3fd = NULL;
+
+	BUG_ON(pdev == NULL);
+	k3fd = (struct k3_fb_data_type *)platform_get_drvdata(pdev);
+	BUG_ON(k3fd == NULL);
+
+	k3fb_logi("index=%d, enter!\n", k3fd->index);
+
+	if (k3fd->panel_info.bl_set_type & BL_SET_BY_PWM) {
+		PWM_CLK_PUT(&(k3fd->panel_info));
+	}
+	LCD_VCC_PUT(&(k3fd->panel_info));
+
+	k3fb_logi("index=%d, exit!\n", k3fd->index);
+
+	return 0;
+}
+
 static int mipi_samsung_panel_set_backlight(struct platform_device *pdev)
 {
 	struct k3_fb_data_type *k3fd = NULL;
@@ -292,6 +483,7 @@ static struct k3_fb_panel_data samsung_panel_data = {
 	.panel_info = &samsung_panel_info,
 	.on = mipi_samsung_panel_on,
 	.off = mipi_samsung_panel_off,
+	.remove = mipi_samsung_panel_remove,
 	.set_backlight = mipi_samsung_panel_set_backlight,
 	.set_fastboot = mipi_samsung_panel_set_fastboot,
 };
@@ -306,7 +498,9 @@ static int __devinit samsung_probe(struct platform_device *pdev)
 	pinfo->display_on = false;
 	pinfo->xres = 540;
 	pinfo->yres = 960;
-	pinfo->type = MIPI_CMD_PANEL;
+	pinfo->width = 55;
+	pinfo->height = 98;
+	pinfo->type = PANEL_MIPI_CMD;
 	pinfo->orientation = LCD_PORTRAIT;
 	pinfo->bpp = EDC_OUT_RGB_888;
 	pinfo->s3d_frm = EDC_FRM_FMT_2D;
@@ -314,6 +508,15 @@ static int __devinit samsung_probe(struct platform_device *pdev)
 	pinfo->bl_set_type = BL_SET_BY_PWM;
 	pinfo->bl_max = PWM_LEVEL;
 	pinfo->bl_min = 1;
+
+	pinfo->frc_enable = 0;
+	pinfo->esd_enable = 0;
+	pinfo->sbl_enable = 1;
+
+	pinfo->sbl.bl_max = 0xff;
+	pinfo->sbl.cal_a = 0x0f;
+	pinfo->sbl.cal_b = 0xd8;
+	pinfo->sbl.str_limit = 0x40;
 
 	pinfo->ldi.h_back_porch = 4;
 	pinfo->ldi.h_front_porch = 18;
@@ -334,10 +537,11 @@ static int __devinit samsung_probe(struct platform_device *pdev)
 	pinfo->mipi.lane_nums = DSI_2_LANES;
 	pinfo->mipi.color_mode = DSI_24BITS_3;
 	pinfo->mipi.vc = 0;
-	pinfo->mipi.dsi_bit_clk = 300;  /* clock lane(p/n) */
+	pinfo->mipi.dsi_bit_clk = 300;
 
 	/* lcd vcc */
 	LCD_VCC_GET(pdev, pinfo);
+	LCDIO_SET_VOLTAGE(pinfo, 1800000, 1800000);
 	/* lcd iomux */
 	LCD_IOMUX_GET(pinfo);
 	/* lcd resource */
@@ -355,7 +559,7 @@ static int __devinit samsung_probe(struct platform_device *pdev)
 	/* alloc panel device data */
 	if (platform_device_add_data(pdev, &samsung_panel_data,
 		sizeof(struct k3_fb_panel_data))) {
-		pr_err("k3fb, %s: platform_device_add_data failed!\n", __func__);
+		k3fb_loge("failed to platform_device_add_data!\n");
 		platform_device_put(pdev);
 		return -ENOMEM;
 	}
@@ -387,8 +591,11 @@ static int samsung_remove(struct platform_device *pdev)
 
 static void samsung_shutdown(struct platform_device *pdev)
 {
-	if (samsung_remove(pdev) != 0) {
-		pr_err("k3fb, %s: failed to shutdown!\n", __func__);
+	int ret = 0;
+
+	ret = samsung_remove(pdev);
+	if (ret != 0) {
+		k3fb_loge("failed to shutdown, error=%d!\n", ret);
 	}
 }
 
@@ -409,7 +616,7 @@ static int __init mipi_samsung_panel_init(void)
 
 	ret = platform_driver_register(&this_driver);
 	if (ret) {
-		pr_err("k3fb, %s not able to register the driver\n", __func__);
+		k3fb_loge("not able to register the driver, error=%d!\n", ret);
 		return ret;
 	}
 

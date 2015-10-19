@@ -39,10 +39,289 @@
 #include "k3_fb.h"
 #include "k3_fb_def.h"
 #include "mipi_dsi.h"
-#include "mipi_sharp_LS035B3SX.h"
 
 
 #define PWM_LEVEL 100
+
+
+/*----------------Power ON Sequence(power on to Normal mode)----------------------*/
+/*
+** Initial condition (RESET="L")
+**
+** VCI ON Logic Voltage
+** WAIT (10ms) For Power Stable
+** VDD5 ON Analog Voltage
+** WAIT (10ms) For Power Stable
+** Reset release (Reset=H)
+** WAIT MIN 5ms
+*/
+
+/* Sleep out */
+static char exit_sleep[] = {
+	0x11,
+};
+/* WAIT MIN 120ms*/
+
+/* Register bank select */
+static char powerOnData1[] = {
+	0xB0,
+	0x00,
+};
+
+static char powerOnData2[] = {
+	0xE6,
+	0x12, 0x04, 0x00, 0x05,
+	0x07, 0x03, 0xFF, 0x10,
+	0xFF, 0xFF,
+};
+
+static char powerOnData3[] = {
+	0xC6,
+	0x05,
+};
+
+/* Power ON sequence setting B */
+static char powerOnData4[] = {
+	0x99,
+	0x2B, 0x51,
+};
+
+/* Power on sequence setting A */
+static char powerOnData5[] = {
+	0x98,
+	0x01, 0x05, 0x06, 0x0A,
+	0x18, 0x0E, 0x22, 0x23,
+	0x24,
+};
+
+/* Power off sequence setting A */
+static char powerOnData6[] = {
+	0x9B,
+	0x02, 0x06, 0x08, 0x0A,
+	0x0C, 0x01,
+};
+
+/* Red Gamma Sets in Positive */
+static char powerOnData7[] = {
+	0xA2,
+	0x00, 0x2D, 0x0E, 0x05,
+	0xF9, 0x87, 0x66, 0x05,
+};
+
+/* Red Gamma Sets in Negative */
+static char powerOnData8[] = {
+	0xA3,
+	0x00, 0x2D, 0x0E, 0x05,
+	0xF9, 0x87, 0x66, 0x05,
+};
+
+/* Green Gamma Sets in Positive */
+static char powerOnData9[] = {
+	0xA4,
+	0x04, 0x2D, 0x0E, 0x05,
+	0xF9, 0x87, 0x66, 0x05,
+};
+
+/* Green Gamma Sets in Negative */
+static char powerOnData10[] = {
+	0xA5,
+	0x04, 0x2D, 0x0E, 0x05,
+	0xF9, 0x87, 0x66, 0x05,
+};
+
+/* Blue Gamma Sets in Positive */
+static char powerOnData11[] = {
+	0xA6,
+	0x02, 0x30, 0x13, 0x46,
+	0x2C, 0xA9, 0x76, 0x06,
+};
+
+/* Blue Gamma Sets in Negative */
+static char powerOnData12[] = {
+	0xA7,
+	0x02, 0x30, 0x13, 0x46,
+	0x2C, 0xA9, 0x76, 0x06,
+};
+
+/* SETVGMPM: This command set the voltage of VRMP ,VRMM. */
+static char powerOnData13[] = {
+	0xB4,
+	0x68,
+};
+
+/* RBIAS1: */
+static char powerOnData14[] = {
+	0xB5,
+	0x33, 0x03,
+};
+
+/* SELMODE: */
+static char powerOnData15[] = {
+	0xB6,
+	0x02,
+};
+
+/* SET_DDVDHP: */
+static char powerOnData16[] = {
+	0xB7,
+	0x08, 0x44, 0x06, 0x2E,
+	0x00, 0x00, 0x30, 0x33,
+};
+
+/* SET_DDVDHM: */
+static char powerOnData17[] = {
+	0xB8,
+	0x1F, 0x44, 0x10, 0x2E,
+	0x1F, 0x00, 0x30, 0x33,
+};
+
+/* SET_VGH: */
+static char powerOnData18[] = {
+	0xB9,
+	0x48, 0x11, 0x01, 0x00,
+	0x30,
+};
+
+/* SET_VGL */
+static char powerOnData19[] = {
+	0xBA,
+	0x4F, 0x11, 0x00, 0x00,
+	0x30,
+};
+
+/* SET_VCL */
+static char powerOnData20[] = {
+	0xBB,
+	0x11, 0x01, 0x00, 0x30,
+};
+
+/* TVBP */
+static char powerOnData21[] = {
+	0xBC,
+	0x06,
+};
+
+/* THDEHBP */
+static char powerOnData22[] = {
+	0xBF,
+	0x80,
+};
+
+static char powerOnData23[] = {
+	0xB0,
+	0x01,
+};
+
+/* If BANK(B1h) = 1, then this registers are able to be written or read. */
+static char powerOnData24[] = {
+	0xC0,
+	0xC8,
+};
+
+static char powerOnData25[] = {
+	0xC2,
+	0x00,
+};
+
+static char powerOnData26[] = {
+	0xC3,
+	0x00,
+};
+
+static char powerOnData27[] = {
+	0xC4,
+	0x12,
+};
+
+static char powerOnData28[] = {
+	0xC5,
+	0x24,
+};
+
+static char powerOnData29[] = {
+	0xC8,
+	0x00,
+};
+
+/* Adjust the start position of SSD. */
+static char powerOnData30[] = {
+	0xCA,
+	0x12,
+};
+
+/* Adjust the interval of SSD. */
+static char powerOnData31[] = {
+	0xCC,
+	0x12,
+};
+
+/* Blanking Period, Partial non-display area setting. */
+static char powerOnData32[] = {
+	0xD4,
+	0x00,
+};
+
+static char powerOnData33[] = {
+	0xDC,
+	0x20,
+};
+
+/* VALGO */
+static char powerOnData34[] = {
+	0x96,
+	0x01,
+};
+
+/* RDDCOLMODE
+  * 0x55:16bits 0x66:18bits 0x77:24bits */
+static char color_mode_16bits[] = {
+	0x0C,
+	0x55,
+};
+
+static char color_mode_18bits[] = {
+	0x0C,
+	0x66,
+};
+
+static char powerOnData35[] = {
+	0x0C,
+	0x77,
+};
+
+/* MADCTL */
+static char powerOnData36[] = {
+	0x36,
+	0x03,
+};
+
+/* Display On */
+static char display_on[] = {
+	0x29,
+};
+
+
+/*-------------------Power OFF Sequence(Normal to power off)----------------------*/
+
+/* Display Off */
+static char display_off[] = {
+	0x28,
+};
+
+/* Sleep In */
+static char enter_sleep[] = {
+	0x10,
+};
+/* WAIT MIN 120ms For Power Down */
+
+/*
+** Reset release (Reset=L)
+** WAIT (10ms)
+** VDD5OFF Analog Voltage
+** WAIT (10ms) For Power Stable
+** VCI OFF Logic Voltage
+*/
+
 
 static struct dsi_cmd_desc sharp_video_on_cmds[] = {
 	{DTYPE_GEN_WRITE1, 0, 120, WAIT_TYPE_MS,
@@ -189,21 +468,8 @@ static void sharp_disp_on(struct k3_fb_data_type *k3fd)
 	gpio_direction_output(pinfo->gpio_reset, 1);
 	mdelay(1);
 
-	switch (k3fd->panel_info.bpp) {
-	case EDC_OUT_RGB_565:
-		memcpy(sharp_video_on_cmds[35].payload, color_mode_16bits, sizeof(color_mode_16bits));
-		break;
-	case EDC_OUT_RGB_666:
-		memcpy(sharp_video_on_cmds[35].payload, color_mode_18bits, sizeof(color_mode_18bits));
-		break;
-	case EDC_OUT_RGB_888:
-		break;
-	default:
-		pr_err("k3fb, %s: Unsupport this color mode!", __func__);
-		break;
-	}
-
-	mipi_dsi_cmds_tx(sharp_video_on_cmds, ARRAY_SIZE(sharp_video_on_cmds), edc_base);
+	mipi_dsi_cmds_tx(sharp_video_on_cmds,
+		ARRAY_SIZE(sharp_video_on_cmds), edc_base);
 }
 
 static void sharp_disp_off(struct k3_fb_data_type *k3fd)
@@ -274,6 +540,27 @@ static int mipi_sharp_panel_off(struct platform_device *pdev)
 	return 0;
 }
 
+static int mipi_sharp_panel_remove(struct platform_device *pdev)
+{
+	struct k3_fb_data_type *k3fd = NULL;
+
+	BUG_ON(pdev == NULL);
+	k3fd = (struct k3_fb_data_type *)platform_get_drvdata(pdev);
+	BUG_ON(k3fd == NULL);
+
+	k3fb_logi("index=%d, enter!\n", k3fd->index);
+
+	if (k3fd->panel_info.bl_set_type & BL_SET_BY_PWM) {
+		PWM_CLK_PUT(&(k3fd->panel_info));
+	}
+	LCD_VCC_PUT(&(k3fd->panel_info));
+
+	k3fb_logi("index=%d, exit!\n", k3fd->index);
+
+	return 0;
+}
+
+
 static int mipi_sharp_panel_set_backlight(struct platform_device *pdev)
 {
 	struct k3_fb_data_type *k3fd = NULL;
@@ -318,6 +605,7 @@ static struct k3_fb_panel_data sharp_panel_data = {
 	.panel_info = &sharp_panel_info,
 	.on = mipi_sharp_panel_on,
 	.off = mipi_sharp_panel_off,
+	.remove = mipi_sharp_panel_remove,
 	.set_backlight = mipi_sharp_panel_set_backlight,
 	.set_fastboot = mipi_sharp_panel_set_fastboot,
 };
@@ -332,7 +620,9 @@ static int __devinit sharp_probe(struct platform_device *pdev)
 	pinfo->display_on = false;
 	pinfo->xres = 640;
 	pinfo->yres = 960;
-	pinfo->type = MIPI_VIDEO_PANEL;
+	pinfo->width = 55;
+	pinfo->height = 98;
+	pinfo->type = PANEL_MIPI_VIDEO;
 	pinfo->orientation = LCD_PORTRAIT;
 	pinfo->bpp = EDC_OUT_RGB_888;
 	pinfo->s3d_frm = EDC_FRM_FMT_2D;
@@ -340,6 +630,15 @@ static int __devinit sharp_probe(struct platform_device *pdev)
 	pinfo->bl_set_type = BL_SET_BY_PWM;
 	pinfo->bl_max = PWM_LEVEL;
 	pinfo->bl_min = 1;
+
+	pinfo->frc_enable = 0;
+	pinfo->esd_enable = 1;
+	pinfo->sbl_enable = 1;
+
+	pinfo->sbl.bl_max = 0xff;
+	pinfo->sbl.cal_a = 0x0f;
+	pinfo->sbl.cal_b = 0xd8;
+	pinfo->sbl.str_limit = 0x40;
 
 	pinfo->ldi.h_back_porch = 4;
 	pinfo->ldi.h_front_porch = 18;
@@ -355,16 +654,12 @@ static int __devinit sharp_probe(struct platform_device *pdev)
 
 	/* Note: must init here */
 	pinfo->frame_rate = 60;
-#ifdef CONFIG_MACH_TC45MSU3
 	pinfo->clk_rate = 20000000;
-#else
-	pinfo->clk_rate = LCD_GET_CLK_RATE(pinfo);
-#endif
 
 	pinfo->mipi.lane_nums = DSI_2_LANES;
 	pinfo->mipi.color_mode = DSI_24BITS_3;
 	pinfo->mipi.vc = 0;
-	pinfo->mipi.dsi_bit_clk = 300;  /* clock lane(p/n) */
+	pinfo->mipi.dsi_bit_clk = 300;
 
 	/* lcd vcc */
 	LCD_VCC_GET(pdev, pinfo);
@@ -386,7 +681,7 @@ static int __devinit sharp_probe(struct platform_device *pdev)
 	/* alloc panel device data */
 	if (platform_device_add_data(pdev, &sharp_panel_data,
 		sizeof(struct k3_fb_panel_data))) {
-		pr_err("k3fb, %s: platform_device_add_data failed!\n", __func__);
+		k3fb_loge("failed to platform_device_add_data!\n");
 		platform_device_put(pdev);
 		return -ENOMEM;
 	}
@@ -396,39 +691,12 @@ static int __devinit sharp_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int sharp_remove(struct platform_device *pdev)
-{
-	struct k3_fb_data_type *k3fd = NULL;
-
-	BUG_ON(pdev == NULL);
-
-	k3fd = (struct k3_fb_data_type *)platform_get_drvdata(pdev);
-	/*BUG_ON(k3fd == NULL);*/
-	if (!k3fd) {
-		return 0;
-	}
-
-	if (k3fd->panel_info.bl_set_type & BL_SET_BY_PWM) {
-		PWM_CLK_PUT(&(k3fd->panel_info));
-	}
-	LCD_VCC_PUT(&(k3fd->panel_info));
-
-	return 0;
-}
-
-static void sharp_shutdown(struct platform_device *pdev)
-{
-	if (sharp_remove(pdev) != 0) {
-		pr_err("k3fb, %s: failed to shutdown!\n", __func__);
-	}
-}
-
 static struct platform_driver this_driver = {
 	.probe = sharp_probe,
-	.remove = sharp_remove,
+	.remove = NULL,
 	.suspend = NULL,
 	.resume = NULL,
-	.shutdown = sharp_shutdown,
+	.shutdown = NULL,
 	.driver = {
 		.name = "mipi_sharp_LS035B3SX",
 	},
@@ -440,7 +708,7 @@ static int __init mipi_sharp_panel_init(void)
 
 	ret = platform_driver_register(&this_driver);
 	if (ret) {
-		pr_err("k3fb, %s not able to register the driver\n", __func__);
+		k3fb_loge("not able to register the driver, error=%d!\n", ret);
 		return ret;
 	}
 
