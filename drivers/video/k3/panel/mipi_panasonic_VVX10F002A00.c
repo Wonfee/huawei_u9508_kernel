@@ -76,7 +76,7 @@ static int panasonic_sysfs_init(struct platform_device *pdev)
 	int ret;
 	ret = sysfs_create_group(&pdev->dev.kobj, &panasonic_attr_group);
 	if (ret) {
-		pr_err("k3fb, %s: create sysfs file failed!\n", __func__);
+		k3fb_loge("create sysfs file failed!\n");
 		return ret;
 	}
 	return 0;
@@ -150,7 +150,7 @@ static void panasonic_disp_on(struct k3_fb_data_type *k3fd)
 	mdelay(10);
 
 	if (gpio_request(GPIO_15_5, "LCD_EN") != 0) {
-		pr_err("k3fb, %s: failed to request gpio 125.\n", __func__);
+		k3fb_loge("failed to request gpio 125.\n");
 	}
 
 	gpio_direction_output(GPIO_15_5, 1);
@@ -242,12 +242,11 @@ static int mipi_panasonic_panel_remove(struct platform_device *pdev)
 {
 	struct k3_fb_data_type *k3fd = NULL;
 	
-	pr_info("k3fb, %s: enter!\n", __func__);
-
 	BUG_ON(pdev == NULL);
-
 	k3fd = (struct k3_fb_data_type *)platform_get_drvdata(pdev);
 	BUG_ON(k3fd == NULL);
+
+	k3fb_logi("index=%d, enter!\n", k3fd->index);
 
 	if (k3fd->panel_info.bl_set_type & BL_SET_BY_PWM) {
 		PWM_CLK_PUT(&(k3fd->panel_info));
@@ -256,7 +255,7 @@ static int mipi_panasonic_panel_remove(struct platform_device *pdev)
 
 	panasonic_sysfs_deinit(pdev);
 
-	pr_info("k3fb, %s: exit!\n", __func__);
+	k3fb_logi("index=%d, exit!\n", k3fd->index);
 
 	return 0;
 }
@@ -404,7 +403,9 @@ static int __devinit panasonic_probe(struct platform_device *pdev)
 	pinfo->display_on = false;
 	pinfo->xres = 1920;
 	pinfo->yres = 1200;
-	pinfo->type = MIPI_VIDEO_PANEL;
+	pinfo->width = 217;
+	pinfo->height = 136;
+	pinfo->type = PANEL_MIPI_VIDEO;
 	pinfo->orientation = LCD_LANDSCAPE;
 	pinfo->bpp = EDC_OUT_RGB_888;
 	pinfo->s3d_frm = EDC_FRM_FMT_2D;
@@ -415,7 +416,9 @@ static int __devinit panasonic_probe(struct platform_device *pdev)
 
 	pinfo->sbl.bl_max = 0x64;
 	pinfo->sbl.cal_a = 0x18;
+	pinfo->sbl.cal_b = 0xd8;
 	pinfo->sbl.str_limit = 0x50;
+	
 	pinfo->ldi.h_back_porch = 49;
 	pinfo->ldi.h_front_porch = 89;
 	pinfo->ldi.h_pulse_width = 5;
@@ -458,7 +461,7 @@ static int __devinit panasonic_probe(struct platform_device *pdev)
 	/* alloc panel device data */
 	if (platform_device_add_data(pdev, &panasonic_panel_data,
 			sizeof(struct k3_fb_panel_data))) {
-		pr_err("k3fb, %s: platform_device_add_data failed!\n", __func__);
+		k3fb_loge("failed to platform_device_add_data!\n");
 		platform_device_put(pdev);
 		return -ENOMEM;
 	}
@@ -487,7 +490,7 @@ static int __init mipi_panasonic_panel_init(void)
 
 	ret = platform_driver_register(&this_driver);
 	if (ret) {
-		pr_err("k3fb, %s not able to register the driver\n", __func__);
+		k3fb_loge("not able to register the driver, error=%d!\n", ret);
 		return ret;
 	}
 

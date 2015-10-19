@@ -31,11 +31,143 @@
 
 #include "k3_fb.h"
 #include "k3_fb_def.h"
-#include "ldi_samsung_LMS350DF04.h"
 
 
 #define PWM_LEVEL 100
 #define TIME_PER_FRAME	16
+
+/*--------------Power ON Sequence(power on to Normal mode)----------------------*/
+
+static u8 powerOnData1[] = {
+    0x74, 0x00, 0x07,
+    0x76, 0x00, 0x00
+};
+
+/* Wait more than 10ms */
+static u8 powerOnData2[] = {
+    0x74, 0x00, 0x11,
+    0x76, 0x22, 0x2F,
+    0x74, 0x00, 0x12,
+    0x76, 0x0F, 0x00,
+    0x74, 0x00, 0x13,
+    0x76, 0x7F, 0xD9,
+    0x74, 0x00, 0x76,
+    0x76, 0x22, 0x13,
+    0x74, 0x00, 0x74,
+    0x76, 0x00, 0x01,
+    0x74, 0x00, 0x76,
+    0x76, 0x00, 0x00,
+    0x74, 0x00, 0x10,
+    0x76, 0x56, 0x04
+};
+
+/* Wait more than 6frames */
+static u8 powerOnData3[] = {
+    0x74, 0x00, 0x12,
+    0x76, 0x0C, 0x63
+};
+
+/* Wait more than 5frames */
+static u8 powerOnData4[] = {
+    0x74, 0x00, 0x01,
+    0x76, 0x08, 0x3B, /* 0x08 or 0x0b */
+    0x74, 0x00, 0x02,
+    0x76, 0x03, 0x00,
+    0x74, 0x00, 0x03,
+    0x76, 0xC0, 0x40,
+    0x74, 0x00, 0x08,
+    0x76, 0x00, 0x0A,
+    0x74, 0x00, 0x09,
+    0x76, 0x00, 0x0F,
+    0x74, 0x00, 0x76,
+    0x76, 0x22, 0x13,
+    0x74, 0x00, 0x0b,
+    0x76, 0x33, 0x40,
+    0x74, 0x00, 0x0c,
+    0x76, 0x00, 0x20,
+    0x74, 0x00, 0x1C,
+    0x76, 0x77, 0x70,
+    0x74, 0x00, 0x76,
+    0x76, 0x00, 0x00,
+    0x74, 0x00, 0x0D,
+    0x76, 0x00, 0x00,
+    0x74, 0x00, 0x0E,
+    0x76, 0x05, 0x00,
+    0x74, 0x00, 0x14,
+    0x76, 0x00, 0x00,
+    0x74, 0x00, 0x15,
+    0x76, 0x08, 0x03,
+    0x74, 0x00, 0x16,
+    0x76, 0x00, 0x00,
+    0x74, 0x00, 0x30,
+    0x76, 0x00, 0x03,
+    0x74, 0x00, 0x31,
+    0x76, 0x07, 0x0F,
+    0x74, 0x00, 0x32,
+    0x76, 0x0D, 0x05,
+    0x74, 0x00, 0x33,
+    0x76, 0x04, 0x05,
+    0x74, 0x00, 0x34,
+    0x76, 0x09, 0x0D,
+    0x74, 0x00, 0x35,
+    0x76, 0x05, 0x01,
+    0x74, 0x00, 0x36,
+    0x76, 0x04, 0x00,
+    0x74, 0x00, 0x37,
+    0x76, 0x05, 0x04,
+    0x74, 0x00, 0x38,
+    0x76, 0x0C, 0x09,
+    0x74, 0x00, 0x39,
+    0x76, 0x01, 0x0C
+};
+
+/* wait NOTHING  */
+static u8 powerOnData5[] = {
+    0x74, 0x00, 0x07,
+    0x76, 0x00, 0x01
+};
+
+/* Wait more than 2frame */
+static u8 powerOnData6[] = {
+    0x74, 0x00, 0x07,
+    0x76, 0x01, 0x01
+};
+
+/* Wait more than 2frame */
+static u8 powerOnData7[] = {
+    0x74, 0x00, 0x07,
+    0x76, 0x01, 0x03
+};
+
+
+/* --------------Power Off Sequence(Normal mode to power off)-------------------- */
+
+static u8 powerOffData1[] = {
+    0x74, 0x00, 0x0b,
+    0x76, 0x30, 0x00,
+    0x74, 0x00, 0x07,
+    0x76, 0x01, 0x02
+};
+
+/* Wait more than 2frame */
+static u8 powerOffData2[] = {
+    0x74, 0x00, 0x07,
+    0x76, 0x00, 0x00
+};
+
+/* Wait more than 2frame */
+static u8 powerOffData3[] = {
+    0x74, 0x00, 0x12,
+    0x76, 0x00, 0x00,
+    0x74, 0x00, 0x10,
+    0x76, 0x06, 0x00
+};
+
+/* wait 1s */
+static u8 powerOffData4[] = {
+    0x74, 0x00, 0x10,
+    0x76, 0x06, 0x01
+};
 
 
 #ifdef CONFIG_MACH_TC45MSU3
@@ -61,7 +193,7 @@ static bool spiSendData(u8 *data, u32 length, u8 bitcount)
 	xferpack.spiDevice  = CS1;  /* use LCD cs as test */
 
 	if (CspiDataExchange(&xferpack) == -1) {
-		pr_err("k3fb, %s-%d: CspiDataExchange failed!", __func__, __LINE__);
+		k3fb_loge("CspiDataExchange failed!\n");
 		return false;
 	}
 
@@ -277,14 +409,25 @@ static int __devinit samsung_probe(struct platform_device *pdev)
 	pinfo->display_on = false;
 	pinfo->xres = 320;
 	pinfo->yres = 480;
-	pinfo->type = LDI_PANEL;
+	pinfo->width = 55;
+	pinfo->height = 98;
+	pinfo->type = PANEL_LDI;
 	pinfo->orientation = LCD_PORTRAIT;
-	pinfo->bpp = EDC_OUT_RGB_888; /* 24 */
+	pinfo->bpp = EDC_OUT_RGB_888;
 	pinfo->s3d_frm = EDC_FRM_FMT_2D;
 	pinfo->bgr_fmt = EDC_RGB;
 	pinfo->bl_set_type = BL_SET_BY_PWM;
 	pinfo->bl_max = PWM_LEVEL;
 	pinfo->bl_min = 1;
+
+	pinfo->frc_enable = 0;
+	pinfo->esd_enable = 0;
+	pinfo->sbl_enable = 1;
+
+	pinfo->sbl.bl_max = 0xff;
+	pinfo->sbl.cal_a = 0x0f;
+	pinfo->sbl.cal_b = 0xd8;
+	pinfo->sbl.str_limit = 0x40;
 
 	pinfo->ldi.h_back_porch = 11;
 	pinfo->ldi.h_front_porch = 4;
@@ -300,10 +443,11 @@ static int __devinit samsung_probe(struct platform_device *pdev)
 
 	/* Note: must init here */
 	pinfo->frame_rate = 60;
-	pinfo->clk_rate = LCD_GET_CLK_RATE(pinfo);
+	pinfo->clk_rate = 21000000;
 
 	/* lcd vcc */
 	LCD_VCC_GET(pdev, pinfo);
+	LCDIO_SET_VOLTAGE(pinfo, 1800000, 1800000);
 	/* lcd iomux */
 	LCD_IOMUX_GET(pinfo);
 	/* lcd resource */
@@ -321,7 +465,7 @@ static int __devinit samsung_probe(struct platform_device *pdev)
 	/* alloc panel device data */
 	if (platform_device_add_data(pdev, &samsung_panel_data,
 		sizeof(struct k3_fb_panel_data))) {
-		pr_err("k3fb, %s: platform_device_add_data failed!\n", __func__);
+		k3fb_loge("failed to platform_device_add_data!\n");
 		platform_device_put(pdev);
 		return -ENOMEM;
 	}
@@ -353,8 +497,11 @@ static int samsung_remove(struct platform_device *pdev)
 
 static void samsung_shutdown(struct platform_device *pdev)
 {
-	if (samsung_remove(pdev) != 0) {
-		pr_err("k3fb, %s: failed to shutdown!\n", __func__);
+	int ret = 0;
+
+	ret = samsung_remove(pdev);
+	if (ret != 0) {
+		k3fb_loge("failed to shutdown, error=%d!\n", ret);
 	}
 }
 
@@ -375,7 +522,7 @@ static int __init ldi_samsung_panel_init(void)
 
 	ret = platform_driver_register(&this_driver);
 	if (ret) {
-		pr_err("k3fb, %s not able to register the driver\n", __func__);
+		k3fb_loge("not able to register the driver, error=%d.\n", ret);
 		return ret;
 	}
 
